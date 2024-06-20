@@ -95,6 +95,8 @@ void SaveBoxPred(std::vector<fastbev::post::transbbox::BoundingBox> boxes, std::
           ofs << box.size.l << " ";
           ofs << box.size.h << " ";
           ofs << box.z_rotation << " ";
+          ofs << box.velocity.vx << " ";
+          ofs << box.velocity.vy << " ";
           ofs << box.id << " ";
           ofs << box.score << " ";
           ofs << "\n";
