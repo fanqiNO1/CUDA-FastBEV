@@ -17,6 +17,7 @@ namespace fastbev {
 namespace post {
 
 struct BindingOut{
+  float* car_velocity;
   float* cls_scores;
   int32_t* dir_cls_scores;
   float* bbox_preds;

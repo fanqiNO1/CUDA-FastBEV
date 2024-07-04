@@ -356,6 +356,7 @@ static std::vector<BoundingBox> box3d_multiclass_scale_nms(const float* mlvl_bbo
 class TransBBoxImplement : public TransBBox {
  public:
   virtual ~TransBBoxImplement() {
+    if (car_velocity_host_) checkRuntime(cudaFreeHost(car_velocity_host_));
     if (cls_scores_host_) checkRuntime(cudaFreeHost(cls_scores_host_));
     if (bbox_preds_host_) checkRuntime(cudaFreeHost(bbox_preds_host_));
     if (dir_cls_scores_host_) checkRuntime(cudaFreeHost(dir_cls_scores_host_));
@@ -363,13 +364,15 @@ class TransBBoxImplement : public TransBBox {
 
   virtual bool init(const TransBBoxParameter& param, std::vector<std::vector<int>> bingingshape) {
     param_ = param;
-    num_classes_ = bingingshape[0][1];
+    num_classes_ = bingingshape[1][1];
 
-    std::vector<int> cls_score_shape = bingingshape[0];
-    std::vector<int> bbox_preds_shape = bingingshape[2];
-    std::vector<int> dir_cls_scores_shape = bingingshape[1];
+    std::vector<int> car_velocity_shape = bingingshape[0];
+    std::vector<int> cls_score_shape = bingingshape[1];
+    std::vector<int> bbox_preds_shape = bingingshape[3];
+    std::vector<int> dir_cls_scores_shape = bingingshape[2];
 
-
+    volumn_car_velocity_ = std::accumulate(car_velocity_shape.begin(), car_velocity_shape.end(), 1, std::multiplies<int32_t>());
+    checkRuntime(cudaMallocHost(&car_velocity_host_, volumn_car_velocity_ * sizeof(float)));
     volumn_cls_scores_ = std::accumulate(cls_score_shape.begin(), cls_score_shape.end(), 1, std::multiplies<int32_t>());
     checkRuntime(cudaMallocHost(&cls_scores_host_, volumn_cls_scores_ * sizeof(float)));
     volumn_bbox_preds_ = std::accumulate(bbox_preds_shape.begin(), bbox_preds_shape.end(), 1, std::multiplies<int32_t>());
@@ -377,6 +380,7 @@ class TransBBoxImplement : public TransBBox {
     volumn_dir_cls_scores_ = std::accumulate(dir_cls_scores_shape.begin(), dir_cls_scores_shape.end(), 1, std::multiplies<int32_t>());
     checkRuntime(cudaMallocHost(&dir_cls_scores_host_, volumn_dir_cls_scores_ * sizeof(int32_t)));
     checkRuntime(cudaMallocHost(&mlvl_bboxes_for_nms_, volumn_dir_cls_scores_ * 5 *sizeof(float)));
+    // printf("volume_cls_scores: %d, volume_bbox_preds: %d, volume_dir_cls_scores: %d, volume_car_velocity: %d\n", volumn_cls_scores_, volumn_bbox_preds_, volumn_dir_cls_scores_, volumn_car_velocity_);
 
     return true;
   }
@@ -384,10 +388,12 @@ class TransBBoxImplement : public TransBBox {
   virtual std::vector<BoundingBox> forward(const BindingOut bindings, void* stream,
                                            bool sorted) override {
     cudaStream_t _stream = static_cast<cudaStream_t>(stream);
+    float* car_velocity = bindings.car_velocity;
     float* cls_scores = bindings.cls_scores;
     int32_t* dir_cls_scores = bindings.dir_cls_scores;
     float* bbox_preds = bindings.bbox_preds;
 
+    checkRuntime(cudaMemcpyAsync(car_velocity_host_, car_velocity, volumn_car_velocity_ * sizeof(float), cudaMemcpyDeviceToHost, _stream));
     checkRuntime(cudaMemcpyAsync(dir_cls_scores_host_, dir_cls_scores, volumn_dir_cls_scores_ * sizeof(int32_t), cudaMemcpyDeviceToHost, _stream));
     checkRuntime(cudaMemcpyAsync(cls_scores_host_, cls_scores, volumn_cls_scores_ * sizeof(float), cudaMemcpyDeviceToHost, _stream));
     checkRuntime(cudaMemcpyAsync(bbox_preds_host_, bbox_preds, volumn_bbox_preds_ * sizeof(float), cudaMemcpyDeviceToHost, _stream));
@@ -406,6 +412,19 @@ class TransBBoxImplement : public TransBBox {
     if (sorted) {
       std::sort(output.begin(), output.end(), [](BoundingBox& a, BoundingBox& b) { return a.score > b.score; });
     }
+    BoundingBox car_velocity_container;
+    car_velocity_container.position.x = -1;
+    car_velocity_container.position.y = -1;
+    car_velocity_container.position.z = -1;
+    car_velocity_container.size.w = -1;
+    car_velocity_container.size.l = -1;
+    car_velocity_container.size.h = -1;
+    car_velocity_container.velocity.vx = car_velocity_host_[0];
+    car_velocity_container.velocity.vy = car_velocity_host_[1];
+    car_velocity_container.z_rotation = -1;
+    car_velocity_container.score = -1;
+    car_velocity_container.id = -1;
+    output.insert(output.begin(), car_velocity_container);
     return output;
   }
 
@@ -415,9 +434,11 @@ class TransBBoxImplement : public TransBBox {
   float* cls_scores_host_ = nullptr;
   float* bbox_preds_host_ = nullptr;
   int32_t* dir_cls_scores_host_ = nullptr;
+  float* car_velocity_host_ = nullptr;
   unsigned int volumn_cls_scores_ = 0;
   unsigned int volumn_bbox_preds_ = 0;
   unsigned int volumn_dir_cls_scores_ = 0;
+  unsigned int volumn_car_velocity_ = 0;
   float* mlvl_bboxes_for_nms_ = nullptr;
 
 };

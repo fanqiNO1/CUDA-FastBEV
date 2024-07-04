@@ -60,6 +60,7 @@ def quantize_net(model):
     quantize.quantize_neck_fuse(model.neck_fuse_0)
     quantize.quantize_neck_3d(model.neck_3d)
     quantize.quantize_head(model.bbox_head)
+    quantize.quantize_head(model.car_velocity_head)
     # print(model)
     return model
     
@@ -130,7 +131,7 @@ def main():
     parser.add_argument("--deterministic", type=bool, default=True, help="deterministic")
     parser.add_argument('--show', action='store_true', help='show results')
     parser.add_argument('--show-dir', help='directory where results will be saved')
-    parser.add_argument('--test_int8_and_fp32', default=True, help='test int8 and fp32 or not')
+    parser.add_argument('--test_int8_and_fp32', default=False, help='test int8 and fp32 or not')
     parser.add_argument('--out', help='output result file in pickle format')
     parser.add_argument(
         '--format-only',

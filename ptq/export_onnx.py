@@ -228,6 +228,8 @@ class TRTModel_post(nn.Module):
     def forward(self, mlvl_volumes):
         neck_3d_feature = self.model.neck_3d.forward(mlvl_volumes.to(self.device))
         cls_scores, bbox_preds, dir_cls_preds = self.model.bbox_head(neck_3d_feature)
+        car_velocity = self.model.car_velocity_head(neck_3d_feature[0])
+        car_velocity = car_velocity.squeeze(-1).squeeze(-1)
       
         cls_score = cls_scores[0][0]
         bbox_pred = bbox_preds[0][0]
@@ -248,7 +250,7 @@ class TRTModel_post(nn.Module):
         dir_cls_score = dir_cls_scores[topk_inds]
         bboxes = decode(anchors, bbox_pred_)
         
-        return scores, bboxes, dir_cls_score
+        return car_velocity, scores, bboxes, dir_cls_score
         
 
 def main():
@@ -273,7 +275,7 @@ def main():
     
     if args.ptq:
         ckpt     = torch.load(args.checkpoint, map_location=args.device)
-        model_int8.load_state_dict(ckpt.module.state_dict(), strict =True)
+        model_int8.load_state_dict(ckpt.module.state_dict(), strict=False)
     else:
         from mmcv.runner import load_checkpoint
         load_checkpoint(model_int8, args.checkpoint, map_location=args.device)
@@ -306,7 +308,7 @@ def main():
     trtModel_pre.eval()
     output_names_pre = ['mlvl_feat']
 
-    pre_onnx_path = os.path.join(args.outfile, 'fastbev_pre_trt_ptq.onnx')
+    pre_onnx_path = os.path.join(args.outfile, 'fastbev_pre_trt.onnx')
     quantize.quant_nn.TensorQuantizer.use_fb_fake_quant = True
     torch.onnx.export(
         trtModel_pre,
@@ -328,9 +330,9 @@ def main():
     mlvl_volume = mlvl_volumes.to(device)
 
     trtModel_post = TRTModel_post(model_int8, device)
-    output_names_post = ["cls_score", "bbox_pred", "dir_cls_preds"]
+    output_names_post = ["car_velocity", "cls_score", "bbox_pred", "dir_cls_preds"]
 
-    post_onnx_path = os.path.join(args.outfile, 'fastbev_post_trt_ptq.onnx')
+    post_onnx_path = os.path.join(args.outfile, 'fastbev_post_trt_decode.onnx')
     torch.onnx.export(
         trtModel_post,
         (mlvl_volume,),

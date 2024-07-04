@@ -20,6 +20,7 @@ namespace post {
 class TransfusionImplement : public Transfusion {
  public:
   virtual ~TransfusionImplement() {
+    if(bindings_.car_velocity){checkRuntime(cudaFree(bindings_.car_velocity));}
     if(bindings_.cls_scores){checkRuntime(cudaFree(bindings_.cls_scores));}
     if(bindings_.dir_cls_scores){checkRuntime(cudaFree(bindings_.dir_cls_scores));}
     if(bindings_.bbox_preds){checkRuntime(cudaFree(bindings_.bbox_preds));}
@@ -41,22 +42,29 @@ class TransfusionImplement : public Transfusion {
 
   void create_binding_memory() {
     for (int ibinding = 0; ibinding < engine_->num_bindings(); ++ibinding) {
+      // printf("Binding[%d]\n", ibinding);
       if (engine_->is_input(ibinding)) continue;
 
       auto shape = engine_->static_dims(ibinding);
       
       size_t volumn = std::accumulate(shape.begin(), shape.end(), 1, std::multiplies<int>());
+      // printf("volumn: %d\n", volumn);
       if(ibinding == 1){
+        float* pdata = nullptr;
+        checkRuntime(cudaMalloc(&pdata, volumn * sizeof(float)));
+        bindings_.car_velocity = pdata;
+      }
+      if(ibinding == 2){
         float* pdata = nullptr;
         checkRuntime(cudaMalloc(&pdata, volumn * sizeof(float)));
         bindings_.cls_scores = pdata;
       }
-      if(ibinding == 2){
+      if(ibinding == 3){
         int32_t* pdata = nullptr;
         checkRuntime(cudaMalloc(&pdata, volumn * sizeof(int32_t)));
         bindings_.dir_cls_scores = pdata;
       }
-      if(ibinding == 3){
+      if(ibinding == 4){
         float* pdata = nullptr;
         checkRuntime(cudaMalloc(&pdata, volumn * sizeof(float)));
         bindings_.bbox_preds = pdata;
@@ -64,7 +72,15 @@ class TransfusionImplement : public Transfusion {
 
       bindshape_.push_back(shape);
     }
-    Assertf(bindshape_.size() == 3, "Invalid output num of bindings[%d]", static_cast<int>(bindshape_.size()));
+    // print binding shape
+    // for (int i = 0; i < bindshape_.size(); ++i) {
+    //   printf("Binding[%d] shape: ", i);
+    //   for (int j = 0; j < bindshape_[i].size(); ++j) {
+    //     printf("%d ", bindshape_[i][j]);
+    //   }
+    //   printf("\n");
+    // }
+    Assertf(bindshape_.size() == 4, "Invalid output num of bindings[%d]", static_cast<int>(bindshape_.size()));
   }
 
   virtual void print() override { engine_->print("Transfusion"); }
@@ -75,7 +91,7 @@ class TransfusionImplement : public Transfusion {
     cudaStream_t _stream = static_cast<cudaStream_t>(stream);
     
     engine_->forward({/* input  */ camera_bev,
-                      /* output */ bindings_.cls_scores, bindings_.dir_cls_scores, bindings_.bbox_preds},
+                      /* output */ bindings_.car_velocity, bindings_.cls_scores, bindings_.dir_cls_scores, bindings_.bbox_preds},
                      _stream);
 
     return bindings_;

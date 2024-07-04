@@ -298,7 +298,10 @@ def transfer_torch_to_quantization(nninstance : torch.nn.Module, quantmodule):
         setattr(quant_instance, k, val)
 
     def __init__(self):
-        quant_desc_input, quant_desc_weight = quant_nn_utils.pop_quant_desc_in_kwargs(self.__class__)
+        if isinstance(self, quant_nn.QuantAdaptiveAvgPool2d):
+            quant_desc_input = quant_nn_utils.pop_quant_desc_in_kwargs(self.__class__, input_only=True)
+        else:
+            quant_desc_input, quant_desc_weight = quant_nn_utils.pop_quant_desc_in_kwargs(self.__class__)
         if isinstance(self, quant_nn_utils.QuantInputMixin):
             #quant_desc_input = quant_nn_utils.pop_quant_desc_in_kwargs(self.__class__, input_only=True)
             self.init_quantizer(quant_desc_input)
